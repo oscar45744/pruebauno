@@ -1,984 +1,253 @@
-<!doctype html>
-<html lang="es" class="h-full">
- <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Rifa Premium</title>
-  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
-  <script src="https://cdn.jsdelivr.net/npm/lucide@0.263.0/dist/umd/lucide.min.js"></script>
-  <script src="/_sdk/element_sdk.js"></script>
-  <script src="/_sdk/data_sdk.js"></script>
-  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&amp;display=swap" rel="stylesheet">
-  <style>
-  html, body { height: 100%; margin: 0; }
-  * { font-family: 'Outfit', sans-serif; }
+<script>
+const API_URL = "https://sheetdb.io/api/v1/bjse0pjprw04r";
 
-  .ticket {
-    transition: all 0.15s ease;
-    user-select: none;
-    min-height: 60px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 16px;
-    font-weight: 700;
-  }
-  .ticket:hover:not(.taken):not(.selected) {
-    transform: scale(1.1);
-    z-index: 2;
-  }
-  .ticket.selected {
-    animation: pulse-glow 1s ease infinite alternate;
-  }
-  @keyframes pulse-glow {
-    from { box-shadow: 0 0 8px rgba(52,211,153,0.5); }
-    to { box-shadow: 0 0 20px rgba(52,211,153,0.8); }
-  }
-  @keyframes confetti-fall {
-    0% { transform: translateY(-10%) rotate(0deg); opacity:1; }
-    100% { transform: translateY(100%) rotate(720deg); opacity:0; }
-  }
-  .confetti-piece {
-    position: fixed;
-    width: 10px;
-    height: 10px;
-    top: -10px;
-    animation: confetti-fall 3s ease-out forwards;
-  }
-  .toast {
-    animation: toast-in 0.3s ease, toast-out 0.3s ease 2.7s forwards;
-  }
-  @keyframes toast-in { from { transform: translateY(20px); opacity:0; } to { transform: translateY(0); opacity:1; } }
-  @keyframes toast-out { from { opacity:1; } to { opacity:0; } }
+let allTickets = [];
+let seleccionado = null;
+let isLoading = false;
+let usedNumbers = new Set();
 
-  .draw-overlay {
-    animation: fade-in 0.3s ease;
-  }
-  @keyframes fade-in { from { opacity:0; } to { opacity:1; } }
+// ==========================
+// TOAST
+// ==========================
+function showToast(msg, type = "success") {
+  const c = document.getElementById("toast-container");
+  const t = document.createElement("div");
 
-  .eliminated { animation: shrink-out 0.6s ease forwards; }
-  @keyframes shrink-out {
-    0% { transform: scale(1); opacity:1; }
-    50% { transform: scale(1.2); opacity:0.5; }
-    100% { transform: scale(0); opacity:0; }
-  }
-  .winner-reveal {
-    animation: winner-pop 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
-  }
-  @keyframes winner-pop {
-    0% { transform: scale(0.5); opacity:0; }
-    100% { transform: scale(1); opacity:1; }
-  }
-
-  .grid-tickets {
-    display: grid;
-    grid-template-columns: repeat(15, 1fr);
-    gap: 8px;
-    padding: 8px;
-    width: 100%;
-  }
-  @media (max-width: 1024px) {
-    .grid-tickets { grid-template-columns: repeat(10, 1fr); gap: 6px; }
-  }
-  @media (max-width: 768px) {
-    .grid-tickets { grid-template-columns: repeat(8, 1fr); gap: 5px; }
-  }
-  @media (max-width: 640px) {
-    .grid-tickets { grid-template-columns: repeat(5, 1fr); gap: 4px; }
-  }
-
-  .prize-image {
-    width: 100%;
-    height: 100%;
-    object-fit: contain;
-    background: rgba(255,255,255,0.05);
-    border-radius: 12px;
-    padding: 8px;
-  }
-
-  .tab-button {
-    transition: all 0.3s ease;
-  }
-  .tab-button.active {
-    background: #34d399 !important;
-    color: #0b1120 !important;
-  }
-
-  .bank-card {
-    background: linear-gradient(135deg, rgba(52,211,153,0.1) 0%, rgba(251,191,36,0.05) 100%);
-    border: 2px solid rgba(52,211,153,0.3);
-    border-radius: 12px;
-    padding: 20px;
-  }
-  </style>
-  <style>body { box-sizing: border-box; }</style>
- </head>
- <body class="h-full overflow-auto" style="background: #0b1120;">
-  <div id="app" class="h-full w-full" style="background: linear-gradient(135deg, #0b1120 0%, #162038 50%, #0b1120 100%);">
-   <!-- Toast container -->
-   <div id="toast-container" class="fixed top-4 right-4 z-50 flex flex-col gap-2"></div><!-- Confetti container -->
-   <div id="confetti-container" class="fixed inset-0 pointer-events-none z-40"></div>
-   <div class="max-w-5xl mx-auto px-4 py-8">
-    <!-- Header -->
-    <div class="text-center mb-8">
-     <h1 id="main-title" class="text-4xl md:text-5xl font-800 text-white mb-4" style="letter-spacing:-0.02em;">Rifa Benéfica para la Casa Hogar Divina Providencia</h1>
-     <p id="main-subtitle" class="text-lg font-300 whitespace-pre-line" style="color: #94a3b8;">Te invitamos a participar en esta rifa benéfica en apoyo a la Casa Hogar Divina Providencia de San Vicente Chicoloapan. Cada boleto adquirido representa una contribución solidaria a esta noble causa. Participa, gana y ayuda a quienes más lo necesitan.</p>
-     <div class="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-medium mt-4" style="background: rgba(52,211,153,0.15); color: #34d399;">
-      <i data-lucide="ticket" style="width:14px;height:14px;"></i> <span>BOLETOS DISPONIBLES:</span> <span id="available-count" class="font-bold">150</span>
-     </div>
-    </div><!-- TICKET PRICE HIGHLIGHT -->
-    <div class="mt-8 mb-10 flex justify-center">
-     <div class="max-w-sm w-full rounded-3xl p-8 text-center relative overflow-hidden" style="background: linear-gradient(135deg, rgba(251,191,36,0.25) 0%, rgba(251,191,36,0.08) 100%); border: 3px solid rgba(251,191,36,0.5); box-shadow: 0 0 40px rgba(251,191,36,0.3), inset 0 0 20px rgba(251,191,36,0.1);">
-      <div style="position: absolute; top: -40px; left: 50%; transform: translateX(-50%); font-size: 80px; opacity: 0.1;">
-       💰
-      </div>
-      <div style="position: absolute; top: 10px; right: 15px; font-size: 60px; animation: float 3s ease-in-out infinite;">
-       💵
-      </div>
-      <div style="position: absolute; bottom: 20px; left: 15px; font-size: 50px; animation: float 4s ease-in-out infinite; animation-delay: 0.5s;">
-       💸
-      </div>
-      <div class="relative z-10">
-       <p class="text-sm font-600 mb-2" style="color: #fbbf24; letter-spacing: 2px; text-transform: uppercase;">💎 Costo del Boleto 💎</p>
-       <p class="text-6xl font-900 mb-2" style="color: #fbbf24; text-shadow: 0 4px 12px rgba(251,191,36,0.4); letter-spacing: -1px;">$50</p>
-       <p class="text-lg font-700 mb-3 text-white">PESOS MEXICANOS</p>
-       <div class="h-1 w-16 mx-auto rounded-full mb-3" style="background: linear-gradient(90deg, #fbbf24 0%, rgba(251,191,36,0) 100%);"></div>
-       <p class="text-xs font-500" style="color: #cbd5e1;">Un boleto = Una oportunidad de ganar</p>
-      </div>
-     </div>
-    </div>
-    <style>
-     @keyframes float {
-      0%, 100% { transform: translateY(0px); }
-      50% { transform: translateY(-15px); }
-     }
-    </style><!-- Premios lado a lado -->
-    <div class="grid grid-cols-1 gap-6 mb-8">
-     <!-- Prize 1: Fossil Watch -->
-     <div class="rounded-2xl p-5" style="background: rgba(251,191,36,0.08); border: 2px solid rgba(251,191,36,0.2);">
-      <div class="flex justify-center mb-4">
-       <img src="https://images.unsplash.com/photo-1523170335258-f5ed11844a49?w=300&amp;h=300&amp;fit=crop" alt="Reloj Fossil" class="prize-image" style="width:150px;height:150px;" loading="lazy" onerror="console.error('Image failed:', this.src); this.style.background='linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%)'; this.alt='Imagen no disponible';">
-      </div>
-      <div class="text-center">
-       <div class="inline-block px-3 py-1 rounded-full text-xs font-600 mb-3" style="background:rgba(251,191,36,0.2);color:#fbbf24;">
-        ⭐ PREMIO 1
-       </div>
-       <h3 class="text-lg font-800 text-white mb-2">Reloj Fossil Neutra</h3>
-       <div class="space-y-2 text-left">
-        <div class="text-xs p-2 rounded-lg" style="background:rgba(251,191,36,0.1);color:#fbbf24;">
-         <span class="font-600">💎 Especificaciones:</span>
-         <ul class="mt-1 space-y-1 text-xs" style="color:#cbd5e1;">
-          <li>• Caja: 44 mm acero inoxidable</li>
-          <li>• Correa: 22 mm acero inoxidable extensible</li>
-          <li>• Movimiento cuarzo con cronógrafo</li>
-          <li>• Carátula satinada negra</li>
-          <li>• Cristal mineral reforzado anti-rayones</li>
-          <li>• Fechador y 24h + cronómetro</li>
-          <li>• Resistencia al agua: 50m (5 ATM)</li>
-          <li>• Compatible con correas Fossil 22mm</li>
-          <li>• Diseño atemporal mid-century</li>
-         </ul>
-        </div>
-       </div>
-      </div>
-     </div><!-- Prize 2: Dunlop Machine -->
-     <div class="rounded-2xl p-5" style="background: rgba(251,191,36,0.08); border: 2px solid rgba(251,191,36,0.2);">
-      <div class="flex justify-center mb-4">
-       <img src="https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=300&amp;h=300&amp;fit=crop" alt="Máquina de Ejercicio" class="prize-image" style="width:150px;height:150px;" loading="lazy" onerror="console.error('Image failed:', this.src); this.style.background='linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%)'; this.alt='Imagen no disponible';">
-      </div>
-      <div class="text-center">
-       <div class="inline-block px-3 py-1 rounded-full text-xs font-600 mb-3" style="background:rgba(251,191,36,0.2);color:#fbbf24;">
-        ⭐ PREMIO 2
-       </div>
-       <h3 class="text-lg font-800 text-white mb-2">Banco Abdominal Premium</h3>
-       <div class="space-y-2 text-left">
-        <div class="text-xs p-2 rounded-lg" style="background:rgba(251,191,36,0.1);color:#fbbf24;">
-         <span class="font-600">💪 Características:</span>
-         <ul class="mt-1 space-y-1 text-xs" style="color:#cbd5e1;">
-          <li>• Arco metálico superior para guía del movimiento</li>
-          <li>• Asistencia en crunch sin forzar cuello ni espalda</li>
-          <li>• Agarres ergonómicos recubiertos de espuma</li>
-          <li>• Soporte cervical con almohadilla acolchada</li>
-          <li>• Reduce tensión en cervicales y lumbares</li>
-          <li>• Diseño plegable compacto</li>
-          <li>• Fácil almacenamiento bajo cama o armario</li>
-          <li>• Estructura acero reforzado profesional</li>
-          <li>• Capacidad de peso: 150+ kg</li>
-         </ul>
-        </div>
-       </div>
-      </div>
-     </div>
-    </div><!-- Datos del participante -->
-    <div class="rounded-2xl p-6 mb-6" style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08);">
-     <h2 class="text-sm font-700 text-white mb-4" style="color: #94a3b8;">📋 TUS DATOS</h2>
-     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
-      <div>
-       <label class="block text-xs font-500 mb-2" style="color:#94a3b8;">Nombre completo</label> <input id="nombre" type="text" placeholder="Tu nombre" class="w-full px-4 py-2.5 rounded-lg text-sm text-white outline-none" style="background:rgba(255,255,255,0.07); border:1px solid rgba(255,255,255,0.1);" onfocus="this.style.borderColor='#34d399'" onblur="this.style.borderColor='rgba(255,255,255,0.1)'">
-      </div>
-      <div>
-       <label class="block text-xs font-500 mb-2" style="color:#94a3b8;">Teléfono</label> <input id="telefono" type="tel" placeholder="Tu teléfono" class="w-full px-4 py-2.5 rounded-lg text-sm text-white outline-none" style="background:rgba(255,255,255,0.07); border:1px solid rgba(255,255,255,0.1);" onfocus="this.style.borderColor='#34d399'" onblur="this.style.borderColor='rgba(255,255,255,0.1)'">
-      </div>
-     </div>
-    </div><!-- Seleccionar número -->
-    <div class="rounded-2xl p-6 mb-6" style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06);">
-     <h2 class="text-sm font-700 mb-4" style="color: #94a3b8;">🎫 SELECCIONA TU NÚMERO DE BOLETO</h2>
-     <p class="text-xs mb-4" style="color: #64748b;">Haz clic en un número disponible para elegirlo</p>
-     <div id="selected-display" class="text-center py-3 text-sm mb-4 rounded-lg" style="background:rgba(52,211,153,0.1);color:#34d399;font-weight:700;">
-      Selecciona un número abajo
-     </div>
-     <div id="grid" class="grid-tickets"></div>
-    </div><!-- Registrar boleto -->
-    <div class="flex flex-col gap-3 mb-8">
-     <button id="register-btn" onclick="registrar()" class="w-full py-3 rounded-xl font-600 text-sm flex items-center justify-center gap-2 transition-all" style="background:#34d399; color:#0b1120;"> <i data-lucide="check-circle" style="width:18px;height:18px;"></i> <span>Registrar mi boleto</span> </button>
-    </div><!-- Información del sorteo -->
-    <div class="rounded-2xl p-6 mb-8" style="background: linear-gradient(135deg, rgba(52,211,153,0.12) 0%, rgba(34,197,94,0.08) 100%); border: 2px solid rgba(52,211,153,0.3); position: relative; overflow: hidden;">
-     <div style="position: absolute; top: 0; right: 0; width: 100px; height: 100px; background: radial-gradient(circle, rgba(52,211,153,0.15) 0%, transparent 70%); border-radius: 50%; margin: -50px -50px 0 0;"></div>
-     <h2 class="text-lg font-700 text-white mb-4 flex items-center gap-2 relative z-10"><i data-lucide="calendar" style="width:22px;height:22px;color:#34d399;"></i> Información del Sorteo</h2>
-     <div class="space-y-3 relative z-10">
-      <div class="flex items-start gap-3 p-3 rounded-lg" style="background: rgba(52,211,153,0.08);"><span style="color:#34d399; font-size: 20px; flex-shrink: 0;">📅</span>
-       <div>
-        <p class="text-xs font-600" style="color:#34d399;">Fecha del Sorteo</p>
-        <p class="text-sm font-700 text-white">Viernes 8 de Mayo</p>
-       </div>
-      </div>
-      <div class="flex items-start gap-3 p-3 rounded-lg" style="background: rgba(34,197,94,0.08);"><span style="color:#22c55e; font-size: 20px; flex-shrink: 0;">📸</span>
-       <div>
-        <p class="text-xs font-600" style="color:#22c55e;">Evidencia del Sorteo</p>
-        <p class="text-sm text-white">Se mandará evidencia del sorteo a través de WhatsApp o correo</p>
-       </div>
-      </div>
-     </div>
-    </div><!-- Forma de pago -->
-    <div class="rounded-2xl p-6 mb-8" style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06);">
-     <h2 class="text-lg font-700 text-white mb-6 flex items-center gap-2"><i data-lucide="credit-card" style="width:20px;height:20px;color:#fbbf24;"></i> Forma de Pago</h2>
-     <div class="flex flex-col items-center gap-6">
-      <!-- Tarjeta visual -->
-      <div class="w-full max-w-sm" style="perspective: 1000px;">
-       <div class="rounded-2xl p-8 relative overflow-hidden" style="background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 50%, #d97706 100%); box-shadow: 0 10px 40px rgba(251,191,36,0.2); aspect-ratio: 1.6; display: flex; flex-direction: column; justify-content: space-between;">
-        <!-- Chip -->
-        <div style="width:50px;height:40px;background:rgba(0,0,0,0.15);border-radius:6px;border:2px solid rgba(0,0,0,0.2);"></div><!-- Logo banco -->
-        <div class="text-2xl font-800 text-white opacity-80">
-         🏦
-        </div><!-- Número tarjeta -->
-        <div class="text-right">
-         <p class="text-xs font-600 text-white opacity-75 mb-1">NÚMERO DE CUENTA</p>
-         <p class="text-xl font-700 text-white font-mono tracking-widest" id="card-number" style="letter-spacing:4px;">0000 0000 0000 0000</p>
-        </div><!-- Titular y fecha -->
-        <div class="flex justify-between items-end">
-         <div>
-          <p class="text-xs font-600 text-white opacity-75">TITULAR</p>
-          <p id="card-holder" class="text-sm font-700 text-white" style="text-transform:uppercase;">TITULAR</p>
-         </div>
-         <div class="text-right">
-          <p class="text-xs font-600 text-white opacity-75">VÁLIDA HASTA</p>
-          <p class="text-sm font-700 text-white">12/27</p>
-         </div>
-        </div>
-       </div>
-      </div><!-- Admin only: Editar número de cuenta -->
-      <div id="admin-bank-section" class="hidden w-full max-w-sm"><label class="block text-xs font-500 mb-2" style="color:#94a3b8;">Editar número de cuenta (Solo Admin)</label>
-       <div class="flex gap-2"><input id="bank-account-input" type="text" placeholder="0123456789012345" maxlength="16" class="flex-1 px-4 py-2.5 rounded-lg text-sm text-white outline-none font-mono tracking-wider" style="background:rgba(255,255,255,0.07); border:1px solid rgba(255,255,255,0.1);" onfocus="this.style.borderColor='#34d399'" onblur="this.style.borderColor='rgba(255,255,255,0.1)'" oninput="updateCardDisplay()"> <button id="save-bank-btn" onclick="saveBankAccount()" class="px-4 py-2.5 rounded-lg text-sm font-600 transition-all" style="background:#34d399; color:#0b1120;">Guardar</button>
-       </div>
-      </div><!-- Bank info display -->
-      <div class="w-full max-w-sm">
-       <p class="text-xs font-500 mb-2" style="color:#94a3b8;">🏦 Banco Azteca</p>
-       <div class="px-4 py-3 rounded-lg text-sm text-white font-mono tracking-wider" style="background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.1);" id="bank-display-text">
-        0000 0000 0000 0000
-       </div>
-      </div><!-- Info pago -->
-      <p id="payment-info" class="text-xs p-4 rounded-lg text-center max-w-sm" style="background:rgba(52,211,153,0.1);color:#34d399;">📌 Transferencia bancaria - Incluye tu nombre en la referencia</p>
-     </div>
-    </div><!-- Admin panel - Hidden by default -->
-    <div id="admin-section" class="hidden mb-8">
-     <div class="rounded-2xl p-5 mb-6" style="background: rgba(251,191,36,0.08); border: 2px solid rgba(251,191,36,0.2);">
-      <h3 class="text-lg font-700 text-white mb-4 flex items-center gap-2"><i data-lucide="lock" style="width:20px;height:20px;"></i> Panel Administrativo</h3>
-      <div class="grid grid-cols-1 gap-3">
-       <button id="draw-btn" onclick="sortear()" class="w-full py-3 rounded-xl font-600 text-sm flex items-center justify-center gap-2 transition-all" style="background: rgba(251,191,36,0.15); color:#fbbf24; border:1px solid rgba(251,191,36,0.3);"> <i data-lucide="trophy" style="width:18px;height:18px;"></i> <span>Realizar sorteo</span> </button> <button onclick="toggleParticipants()" class="w-full py-3 rounded-xl font-600 text-sm flex items-center justify-center gap-2" style="background:rgba(255,255,255,0.08); color:white; border:1px solid rgba(255,255,255,0.1);"> <i data-lucide="eye" style="width:18px;height:18px;"></i> <span>Ver participantes</span> </button> <button id="reset-btn" onclick="resetRaffle()" class="w-full py-3 rounded-xl font-600 text-sm flex items-center justify-center gap-2 transition-all" style="background: rgba(244,63,94,0.15); color:#f43f5e; border:1px solid rgba(244,63,94,0.3);"> <i data-lucide="refresh-cw" style="width:18px;height:18px;"></i> <span>Limpiar boletos</span> </button>
-      </div>
-     </div>
-    </div><!-- Participants list - Only visible to admin -->
-    <div id="participants-section" class="hidden rounded-2xl p-5" style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06);">
-     <h3 class="text-sm font-600 mb-3 flex items-center gap-2" style="color:#94a3b8;"><i data-lucide="users" style="width:16px;height:16px;"></i> Participantes registrados <span id="participant-count" class="px-2 py-0.5 rounded-full text-xs" style="background:rgba(52,211,153,0.15);color:#34d399;">0</span></h3>
-     <div id="participants-list" class="space-y-2 max-h-60 overflow-y-auto"></div>
-     <p id="no-participants" class="text-center text-xs py-4" style="color:#475569;">Aún no hay participantes</p>
-    </div>
-   </div>
-  </div><!-- Draw overlay -->
-  <div id="draw-overlay" class="fixed inset-0 z-30 hidden items-center justify-center" style="background:rgba(0,0,0,0.85);">
-   <div class="text-center p-8 max-w-md mx-4">
-    <div id="draw-content"></div><button onclick="closeDraw()" class="mt-6 px-6 py-2.5 rounded-lg text-sm font-500" style="background:rgba(255,255,255,0.1);color:white;">Cerrar</button>
-   </div>
-  </div><!-- Admin login overlay -->
-  <div id="admin-overlay" class="fixed inset-0 z-50 flex items-center justify-center hidden" style="background:rgba(0,0,0,0.85);">
-   <div class="rounded-2xl p-6 max-w-sm mx-4 text-center" style="background:#1e293b; border:1px solid rgba(255,255,255,0.1);">
-    <h2 class="text-xl font-700 text-white mb-4">Acceso Administrativo</h2><input id="admin-password-input" type="password" placeholder="Contraseña admin" class="w-full px-4 py-2.5 rounded-lg text-sm text-white outline-none mb-4" style="background:rgba(255,255,255,0.07); border:1px solid rgba(255,255,255,0.1);" onkeypress="if(event.key==='Enter') checkAdminPassword()">
-    <div class="flex gap-3 justify-center">
-     <button onclick="checkAdminPassword()" class="px-5 py-2 rounded-lg text-sm font-500" style="background:#34d399;color:#0b1120;">Ingresar</button> <button onclick="closeAdminModal()" class="px-5 py-2 rounded-lg text-sm font-500" style="background:rgba(255,255,255,0.1);color:white;">Cancelar</button>
-    </div>
-   </div>
-  </div><!-- Inline confirm overlay -->
-  <div id="confirm-overlay" class="fixed inset-0 z-30 hidden items-center justify-center" style="background:rgba(0,0,0,0.7);">
-   <div class="rounded-2xl p-6 max-w-sm mx-4 text-center" style="background:#1e293b; border:1px solid rgba(255,255,255,0.1);">
-    <p id="confirm-msg" class="text-white text-sm mb-4"></p>
-    <div class="flex gap-3 justify-center">
-     <button id="confirm-yes" class="px-5 py-2 rounded-lg text-sm font-500" style="background:#34d399;color:#0b1120;">Confirmar</button> <button id="confirm-no" onclick="closeConfirm()" class="px-5 py-2 rounded-lg text-sm font-500" style="background:rgba(255,255,255,0.1);color:white;">Cancelar</button>
-    </div>
-   </div>
-  </div>
-  <script>
-  // State
-  const API_URL = "https://sheetdb.io/api/v1/bjse0pjprw04r";
-  let allTickets = [];
-  let seleccionado = null;
-  let isLoading = false;
-  let isAdmin = false;
-  let usedNumbers = new Set();
-
-  const defaultConfig = {
-    raffle_title: 'Rifa Benéfica Para La Casa Hogar Divina Providencia',
-    raffle_subtitle: 'Te invitamos a participar en esta rifa benéfica en apoyo a la Casa Hogar Divina Providencia de San Vicente Chicoloapan. Cada boleto adquirido representa una contribución solidaria a esta noble causa. Participa, gana y ayuda a quienes más lo necesitan.',
-    admin_password: 'admin123',
-    bank_account: '',
-    account_holder: 'Edwin Emmanuelle Sanchez Enciso',
-    payment_info: '📌 Transferencia bancaria - Incluye tu nombre en la referencia',
-    background_color: '#0b1120',
-    surface_color: '#162038',
-    text_color: '#94a3b8',
-    accent_color: '#34d399',
-    highlight_color: '#fbbf24',
-    font_family: 'Outfit',
-    font_size: 16
+  const colors = {
+    success: "background:#065f46;color:#34d399;",
+    error: "background:#7f1d1d;color:#fca5a5;",
+    info: "background:#1e3a5f;color:#93c5fd;"
   };
 
-  // No guardar número fijo - dejar que el admin lo configure
+  t.className = "toast rounded-lg px-4 py-3 text-sm font-500 shadow-lg";
+  t.style.cssText = colors[type] || colors.info;
+  t.textContent = msg;
 
-  // Toast
-  function showToast(msg, type = 'success') {
-    const c = document.getElementById('toast-container');
-    const t = document.createElement('div');
-    const colors = { success: 'background:#065f46;color:#34d399;', error: 'background:#7f1d1d;color:#fca5a5;', info: 'background:#1e3a5f;color:#93c5fd;' };
-    t.className = 'toast rounded-lg px-4 py-3 text-sm font-500 shadow-lg';
-    t.style.cssText = colors[type] || colors.info;
-    t.textContent = msg;
-    c.appendChild(t);
-    setTimeout(() => t.remove(), 3000);
+  c.appendChild(t);
+
+  setTimeout(() => {
+    t.remove();
+  }, 3000);
+}
+
+// ==========================
+// CARGAR BOLETOS
+// ==========================
+async function cargarBoletos() {
+  try {
+    const res = await fetch(API_URL);
+    const data = await res.json();
+
+    allTickets = data.map(t => ({
+      numero: parseInt(t.numero),
+      nombre: t.nombre,
+      telefono: t.telefono
+    }));
+
+    renderGrid();
+
+  } catch (err) {
+    console.error(err);
+    showToast("Error al cargar boletos", "error");
+  }
+}
+
+// ==========================
+// RENDER GRID
+// ==========================
+function renderGrid() {
+  const grid = document.getElementById("grid");
+
+  usedNumbers.clear();
+
+  allTickets.forEach(t => {
+    usedNumbers.add(parseInt(t.numero));
+  });
+
+  if (grid.children.length === 0) {
+
+    for (let i = 1; i <= 150; i++) {
+
+      const div = document.createElement("div");
+
+      div.className =
+        "ticket rounded-lg flex items-center justify-center text-xs font-600 cursor-pointer relative";
+
+      div.style.cssText =
+        "aspect-ratio:1; min-height:50px; font-size:14px; font-weight:700;";
+
+      div.dataset.num = i;
+
+      div.textContent = String(i).padStart(3, "0");
+
+      div.onclick = () => selectTicket(i, div);
+
+      grid.appendChild(div);
+    }
   }
 
-  // Update card display
-  window.updateCardDisplay = function() {
-    const input = document.getElementById('bank-account-input');
-    const bankAccount = input.value;
-    const cleanDigits = bankAccount.replace(/\D/g, '');
-    const paddedDigits = cleanDigits.padEnd(16, '0').slice(0, 16);
-    const formatted = paddedDigits.match(/.{1,4}/g).join(' ');
-    document.getElementById('card-number').textContent = formatted;
-    document.getElementById('bank-display-text').textContent = formatted;
-  };
+  let available = 0;
 
-  // Save bank account permanently - Guardado en Canva Sheet PERMANENTEMENTE
-  window.saveBankAccount = async function() {
-    const input = document.getElementById('bank-account-input');
-    const bankAccount = input.value.replace(/\D/g, '').slice(0, 16);
-    
-    if (bankAccount.length === 0) {
-      showToast('Ingresa un número de cuenta válido', 'error');
-      return;
-    }
-    
-    if (bankAccount.length < 13) {
-      showToast('El número debe tener al menos 13 dígitos', 'error');
-      return;
-    }
-    
-    if (isLoading) return;
-    isLoading = true;
-    const btn = document.getElementById('save-bank-btn');
-    btn.style.opacity = '0.5';
-    btn.style.pointerEvents = 'none';
+  grid.querySelectorAll(".ticket").forEach(div => {
 
-    // Guardar en Canva Sheet como registro de configuración
-    await fetch(API_URL, {
-  method: "POST",
-  headers: {
-    "Content-Type": "application/json"
-  },
-  body: JSON.stringify({
-    data: [{
-      numero: seleccionado,
-      nombre: nombre,
-      telefono: telefono,
-      created_at: new Date().toISOString()
-    }]
-  })
-});
+    const num = parseInt(div.dataset.num);
 
-    isLoading = false;
-    btn.style.opacity = '1';
-    btn.style.pointerEvents = 'auto';
+    const taken = usedNumbers.has(num);
 
-    if (result.isOk) {
-      // Actualizar card display
-      updateCardDisplay();
-      
-      // Bloquear el campo - NO SE PUEDE EDITAR MÁS
-      blockBankAccountField(input);
-      
-      // Actualizar nombre del titular BLOQUEADO PERMANENTEMENTE
-      document.getElementById('card-holder').textContent = 'EDWIN EMMANUELLE SANCHEZ ENCISO';
-      document.getElementById('card-holder').style.color = '#fbbf24';
-      document.getElementById('card-holder').style.fontWeight = '800';
-      
-      // Mostrar toast de éxito
-      showToast('✅ Número guardado permanentemente en la Canva Sheet', 'success');
+    div.classList.remove("taken", "selected");
+
+    if (taken) {
+
+      div.classList.add("taken");
+
+      div.style.background = "#7f1d1d";
+      div.style.color = "#fca5a5";
+      div.style.cursor = "not-allowed";
+
     } else {
-      showToast('Error al guardar el número', 'error');
-    }
-  };
 
-  // Helper para bloquear el campo de banco
-  function blockBankAccountField(input) {
-    input.disabled = true;
-    input.style.opacity = '0.5';
-    input.style.cursor = 'not-allowed';
-    input.style.pointerEvents = 'none';
-    input.style.background = '#3a4556';
-    input.style.borderColor = 'rgba(52,211,153,0.2)';
-    input.style.color = '#cbd5e1';
-  }
+      div.style.background = "rgba(255,255,255,0.07)";
+      div.style.color = "white";
+      div.style.cursor = "pointer";
 
-  // Admin functions
-  function showAdminModal() {
-    if (isAdmin) {
-      isAdmin = false;
-      document.getElementById('admin-section').classList.add('hidden');
-      document.getElementById('admin-bank-section').classList.add('hidden');
-      document.getElementById('participants-section').classList.add('hidden');
-      showToast('Sesión de administrador cerrada');
-      return;
-    }
-    document.getElementById('admin-overlay').classList.remove('hidden');
-    document.getElementById('admin-overlay').classList.add('flex');
-    document.getElementById('admin-password-input').focus();
-  }
+      available++;
 
-  function checkAdminPassword() {
-    const pwd = document.getElementById('admin-password-input').value;
-    const config = window.elementSdk?.config || defaultConfig;
-    const adminPwd = config.admin_password || defaultConfig.admin_password;
-    
-    if (pwd === adminPwd) {
-      isAdmin = true;
-      closeAdminModal();
-      document.getElementById('admin-section').classList.remove('hidden');
-      document.getElementById('admin-bank-section').classList.remove('hidden');
-      
-      // Cargar el número guardado PERMANENTEMENTE
-      const savedAccount = localStorage.getItem('permanentBankAccount');
-      const isSaved = localStorage.getItem('bankAccountSaved') === 'true';
-      
-      if (savedAccount) {
-        document.getElementById('bank-account-input').value = savedAccount;
-        updateCardDisplay();
-        
-        // Si ya fue guardado, BLOQUEAR completamente
-        if (isSaved) {
-          blockBankAccountField(document.getElementById('bank-account-input'));
-          document.getElementById('bank-saved-message').classList.remove('hidden');
-          document.getElementById('bank-locked-badge').classList.remove('hidden');
-          showToast('✅ Número guardado y bloqueado');
-        }
-      }
-      
-      showToast('Acceso administrativo activado');
-    } else {
-      showToast('Contraseña incorrecta', 'error');
-      document.getElementById('admin-password-input').value = '';
-    }
-  }
+      if (num === seleccionado) {
 
-  function closeAdminModal() {
-    const o = document.getElementById('admin-overlay');
-    o.classList.add('hidden');
-    o.classList.remove('flex');
-  }
+        div.classList.add("selected");
 
-  function toggleParticipants() {
-    const sec = document.getElementById('participants-section');
-    sec.classList.toggle('hidden');
-  }
-
-  // Confirm dialog
-  function showConfirm(msg) {
-    return new Promise(resolve => {
-      document.getElementById('confirm-msg').textContent = msg;
-      const overlay = document.getElementById('confirm-overlay');
-      overlay.classList.remove('hidden');
-      overlay.classList.add('flex');
-      document.getElementById('confirm-yes').onclick = () => { closeConfirm(); resolve(true); };
-      document.getElementById('confirm-no').onclick = () => { closeConfirm(); resolve(false); };
-    });
-  }
-  function closeConfirm() {
-    const o = document.getElementById('confirm-overlay');
-    o.classList.add('hidden');
-    o.classList.remove('flex');
-  }
-
-  // Confetti
-  function launchConfetti() {
-    const c = document.getElementById('confetti-container');
-    const colors = ['#34d399','#fbbf24','#f472b6','#60a5fa','#a78bfa','#fb923c'];
-    for (let i = 0; i < 60; i++) {
-      const p = document.createElement('div');
-      p.className = 'confetti-piece';
-      p.style.cssText = `left:${Math.random()*100}%;background:${colors[Math.floor(Math.random()*colors.length)]};border-radius:${Math.random()>0.5?'50%':'0'};animation-delay:${Math.random()*2}s;animation-duration:${2+Math.random()*2}s;`;
-      c.appendChild(p);
-    }
-    setTimeout(() => c.innerHTML = '', 5000);
-  }
-
-  // Render grid - 150 boletos
-  function renderGrid() {
-    const grid = document.getElementById('grid');
-    usedNumbers.clear();
-    allTickets.forEach(t => { usedNumbers.add(t.numero); });
-
-    // Build if empty
-    if (grid.children.length === 0) {
-      for (let i = 1; i <= 150; i++) {
-        const div = document.createElement('div');
-        div.className = 'ticket rounded-lg flex items-center justify-center text-xs font-600 cursor-pointer relative';
-        div.style.cssText = 'aspect-ratio:1; min-height:50px; font-size:14px; font-weight:700;';
-        div.dataset.num = i;
-        div.textContent = String(i).padStart(3, '0');
-        div.onclick = () => selectTicket(i, div);
-        grid.appendChild(div);
+        div.style.background = "#065f46";
+        div.style.color = "#34d399";
       }
     }
+  });
 
-    // Update states
-    let available = 0;
-    grid.querySelectorAll('.ticket').forEach(div => {
-      const num = parseInt(div.dataset.num);
-      const taken = usedNumbers.has(num);
-      div.classList.remove('taken', 'selected');
+  document.getElementById("available-count").textContent = available;
 
-      if (taken) {
-        div.classList.add('taken');
-        div.style.background = '#7f1d1d';
-        div.style.color = '#fca5a5';
-        div.style.cursor = 'not-allowed';
-        div.title = 'Boleto ocupado';
-      } else {
-        div.style.background = 'rgba(255,255,255,0.07)';
-        div.style.color = 'white';
-        div.style.cursor = 'pointer';
-        div.title = '';
-        available++;
-        if (num === seleccionado) {
-          div.classList.add('selected');
-          div.style.background = '#065f46';
-          div.style.color = '#34d399';
-        }
-      }
-    });
+  const sd = document.getElementById("selected-display");
 
-    document.getElementById('available-count').textContent = available;
-    document.getElementById('participant-count').textContent = allTickets.length;
+  if (seleccionado && !usedNumbers.has(seleccionado)) {
 
-    // Selected display
-    const sd = document.getElementById('selected-display');
-    if (seleccionado && !usedNumbers.has(seleccionado)) {
-      sd.innerHTML = `✅ Número seleccionado: <span style="color:#34d399;font-weight:700;">#${String(seleccionado).padStart(3, '0')}</span>`;
-    } else {
-      sd.textContent = 'Selecciona un número abajo';
-      sd.style.color = '#64748b';
-      if (usedNumbers.has(seleccionado)) seleccionado = null;
-    }
+    sd.innerHTML =
+      `✅ Número seleccionado:
+      <span style="color:#34d399;font-weight:700;">
+      #${String(seleccionado).padStart(3, "0")}
+      </span>`;
 
-    // Participants list (only for admin)
-    if (isAdmin) {
-      const list = document.getElementById('participants-list');
-      const noP = document.getElementById('no-participants');
-      if (allTickets.length === 0) {
-        list.innerHTML = '';
-        noP.style.display = 'block';
-      } else {
-        noP.style.display = 'none';
-        const sorted = [...allTickets].sort((a, b) => a.numero - b.numero);
-        const existing = new Map([...list.children].map(el => [el.dataset.bid, el]));
-        sorted.forEach(t => {
-          const bid = t.__backendId;
-          if (existing.has(bid)) {
-            const el = existing.get(bid);
-            el.querySelector('.p-name').textContent = t.nombre;
-            el.querySelector('.p-num').textContent = `#${String(t.numero).padStart(3, '0')}`;
-            el.querySelector('.p-phone').textContent = t.telefono;
-            existing.delete(bid);
-          } else {
-            const el = document.createElement('div');
-            el.dataset.bid = bid;
-            el.className = 'flex items-center justify-between py-2 px-3 rounded-lg';
-            el.style.cssText = 'background:rgba(255,255,255,0.04);';
-            el.innerHTML = `
-              <div class="flex items-center gap-3">
-                <span class="p-num font-700 text-sm" style="color:#34d399;width:48px;">#${String(t.numero).padStart(3, '0')}</span>
-                <span class="p-name text-sm text-white">${t.nombre}</span>
-              </div>
-              <span class="p-phone text-xs" style="color:#64748b;">${t.telefono}</span>
-            `;
-            list.appendChild(el);
-          }
-        });
-        existing.forEach(el => el.remove());
-      }
-    }
+  } else {
+
+    sd.textContent = "Selecciona un número abajo";
+    sd.style.color = "#64748b";
   }
+}
 
-  function selectTicket(num, div) {
-    if (div.classList.contains('taken')) return;
-    seleccionado = (seleccionado === num) ? null : num;
-   async function cargarBoletos() {
-  const res = await fetch(API_URL);
-  const data = await res.json();
+// ==========================
+// SELECCIONAR BOLETO
+// ==========================
+function selectTicket(num, div) {
 
-  allTickets = data.map(t => ({
-    numero: parseInt(t.numero),
-    nombre: t.nombre,
-    telefono: t.telefono
-  }));
+  if (div.classList.contains("taken")) return;
+
+  seleccionado = (seleccionado === num)
+    ? null
+    : num;
 
   renderGrid();
 }
-    renderGrid();
+
+// ==========================
+// REGISTRAR BOLETO
+// ==========================
+window.registrar = async function () {
+
+  const nombre =
+    document.getElementById("nombre").value.trim();
+
+  const telefono =
+    document.getElementById("telefono").value.trim();
+
+  if (!nombre || !telefono) {
+
+    showToast("Completa nombre y teléfono", "error");
+    return;
   }
 
-  // Register
-  window.registrar = async function() {
-    const nombre = document.getElementById('nombre').value.trim();
-    const telefono = document.getElementById('telefono').value.trim();
+  if (!seleccionado) {
 
-    if (!nombre || !telefono) { showToast('Completa nombre y teléfono', 'error'); return; }
-    if (!seleccionado) { showToast('Selecciona un número', 'error'); return; }
-    if (usedNumbers.has(seleccionado)) { showToast('Ese número ya está ocupado', 'error'); seleccionado = null; renderGrid(); return; }
-    if (allTickets.length >= 999) { showToast('Límite de registros alcanzado', 'error'); return; }
+    showToast("Selecciona un número", "error");
+    return;
+  }
 
-    if (isLoading) return;
-    isLoading = true;
-    const btn = document.getElementById('register-btn');
-    btn.style.opacity = '0.5';
-    btn.style.pointerEvents = 'none';
+  if (usedNumbers.has(seleccionado)) {
 
-    const result = await window.dataSdk.create({
-      numero: seleccionado,
-      nombre: nombre,
-      telefono: telefono,
-      created_at: new Date().toISOString()
-    });
+    showToast("Ese número ya está ocupado", "error");
 
-    isLoading = false;
-    btn.style.opacity = '1';
-    btn.style.pointerEvents = 'auto';
+    seleccionado = null;
 
-    if (result.isOk) {
-      showToast(`✅ Boleto #${String(seleccionado).padStart(3, '0')} registrado`);
-     await cargarBoletos();
-      seleccionado = null;
-      document.getElementById('nombre').value = '';
-      document.getElementById('telefono').value = '';
-    } else {
-      showToast('Error al registrar', 'error');
-    }
-  };
+    renderGrid();
 
-  // Draw with independent prizes
-  window.sortear = async function() {
-    if (allTickets.length < 6) {
-      showToast('Se necesitan mínimo 6 participantes (3 por premio)', 'error');
-      return;
-    }
+    return;
+  }
 
-    const ok = await showConfirm(`¿Realizar sorteo con ${allTickets.length} participantes?\n\nPremio 1: Reloj Fossil\nPremio 2: Banco Abdominal`);
-    if (!ok) return;
+  if (isLoading) return;
 
-    const overlay = document.getElementById('draw-overlay');
-    const content = document.getElementById('draw-content');
-    overlay.classList.remove('hidden');
-    overlay.classList.add('flex', 'draw-overlay');
+  isLoading = true;
 
-    // PREMIO 1
-    await drawPrize(1, 'Reloj Fossil', allTickets);
-  };
+  const btn = document.getElementById("register-btn");
 
-  async function drawPrize(prizeNum, prizeName, availableTickets) {
-    if (availableTickets.length < 3) {
-      showToast(`Sin suficientes participantes para Premio ${prizeNum}`, 'error');
-      document.getElementById('draw-overlay').classList.add('hidden');
-      document.getElementById('draw-overlay').classList.remove('flex');
-      return;
-    }
+  btn.style.opacity = "0.5";
+  btn.style.pointerEvents = "none";
 
-    const overlay = document.getElementById('draw-overlay');
-    const content = document.getElementById('draw-content');
+  try {
 
-    // Shuffle
-    let pool = [...availableTickets];
-    for (let i = pool.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [pool[i], pool[j]] = [pool[j], pool[i]];
-    }
-
-    const finalists = pool.slice(0, 3);
-    const winner = finalists[2];
-
-    content.innerHTML = `
-      <h2 class="text-2xl font-700 text-white mb-2">🎰 PREMIO ${prizeNum}</h2>
-      <p class="text-sm mb-6" style="color:#fbbf24;">${prizeName}</p>
-      <div id="finalist-cards" class="flex flex-col gap-4">
-        ${finalists.map((f, i) => `
-          <div id="finalist-${i}" class="rounded-xl p-4 flex items-center gap-4 transition-all" style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.1);">
-            <span class="text-2xl font-800" style="color:#34d399;">#${String(f.numero).padStart(3, '0')}</span>
-            <div class="text-left">
-              <div class="text-white font-600 text-sm">${f.nombre}</div>
-              <div class="text-xs" style="color:#94a3b8;">${f.telefono}</div>
-            </div>
-          </div>
-        `).join('')}
-      </div>
-    `;
-
-    // Eliminate first
-    await new Promise(r => setTimeout(() => {
-      document.getElementById('finalist-0').classList.add('eliminated');
-      document.getElementById('finalist-0').style.background = 'rgba(127,29,29,0.3)';
-      document.getElementById('finalist-0').style.borderColor = 'rgba(252,165,165,0.3)';
-      const msg = document.createElement('div');
-      msg.className = 'absolute right-4 top-1/2 transform -translate-y-1/2 text-xs font-600 text-center';
-      msg.style.color = '#fca5a5';
-      msg.textContent = 'Te quedaste\ncerca';
-      document.getElementById('finalist-0').style.position = 'relative';
-      document.getElementById('finalist-0').appendChild(msg);
-      r();
-    }, 1500));
-
-    // Eliminate second
-    await new Promise(r => setTimeout(() => {
-      document.getElementById('finalist-1').classList.add('eliminated');
-      document.getElementById('finalist-1').style.background = 'rgba(127,29,29,0.3)';
-      document.getElementById('finalist-1').style.borderColor = 'rgba(252,165,165,0.3)';
-      const msg = document.createElement('div');
-      msg.className = 'absolute right-4 top-1/2 transform -translate-y-1/2 text-xs font-600 text-center';
-      msg.style.color = '#fca5a5';
-      msg.textContent = 'Te quedaste\ncerca';
-      document.getElementById('finalist-1').style.position = 'relative';
-      document.getElementById('finalist-1').appendChild(msg);
-      r();
-    }, 3000));
-
-    // Winner reveal
-    await new Promise(r => setTimeout(() => {
-      content.innerHTML = `
-        <div class="winner-reveal text-center">
-          <div class="text-6xl mb-4 animate-bounce">🏆</div>
-          <h2 class="text-3xl font-800 mb-2" style="color:#fbbf24;">PREMIO ${prizeNum}</h2>
-          <h3 class="text-lg font-700 mb-4" style="color:#34d399;">${prizeName}</h3>
-          <h2 class="text-4xl md:text-5xl font-800 mb-4" style="color:#34d399;">¡GANADOR!</h2>
-          <div class="rounded-2xl p-6 max-w-sm mx-auto" style="background:rgba(52,211,153,0.15);border:3px solid rgba(52,211,153,0.4);">
-            <div class="text-5xl font-800 mb-3" style="color:#fbbf24;">#${String(winner.numero).padStart(3, '0')}</div>
-            <div class="text-2xl font-700 text-white mb-2">${winner.nombre}</div>
-            <div class="text-sm" style="color:#94a3b8;">${winner.telefono}</div>
-          </div>
-        </div>
-      `;
-      launchConfetti();
-      r();
-    }, 4500));
-
-    // Delete winner from database
-    if (isLoading) return;
-    isLoading = true;
-    const deleteResult = await window.dataSdk.delete(winner);
-    isLoading = false;
-
-    if (!deleteResult.isOk) {
-      showToast('Error al eliminar ganador', 'error');
-      return;
-    }
-
-    // Prepare for next prize
-    if (prizeNum === 1) {
-      await new Promise(r => setTimeout(r, 2000));
-      const remainingTickets = allTickets.filter(t => t.__backendId !== winner.__backendId);
-      
-      if (remainingTickets.length < 3) {
-        content.innerHTML = `
-          <div class="text-center">
-            <div class="text-6xl mb-4">✨</div>
-            <h2 class="text-3xl font-800 text-white mb-4">¡Sorteo finalizado!</h2>
-            <p style="color:#94a3b8;">No hay suficientes participantes para el segundo premio</p>
-          </div>
-        `;
-        await new Promise(r => setTimeout(() => { overlay.classList.add('hidden'); overlay.classList.remove('flex'); r(); }, 3000));
-      } else {
-        await drawPrize(2, 'Banco Abdominal', remainingTickets);
-      }
-    } else {
-      await new Promise(r => setTimeout(() => {
-        content.innerHTML = `
-          <div class="text-center">
-            <div class="text-6xl mb-4">✨</div>
-            <h2 class="text-3xl font-800 text-white mb-4">¡Sorteo finalizado!</h2>
-            <p style="color:#94a3b8;">Ambos premios han sido asignados</p>
-          </div>
-        `;
-        r();
-      }, 2000));
-      await new Promise(r => setTimeout(() => { overlay.classList.add('hidden'); overlay.classList.remove('flex'); r(); }, 4000));
-    }
-  };
-
-  window.resetRaffle = async function() {
-    const ok = await showConfirm('¿Limpiar todos los boletos? Esta acción no se puede deshacer.');
-    if (!ok) return;
-
-    if (isLoading) return;
-    isLoading = true;
-    const btn = document.getElementById('reset-btn');
-    btn.style.opacity = '0.5';
-    btn.style.pointerEvents = 'none';
-
-    const toDelete = [...allTickets];
-    for (const ticket of toDelete) {
-      await window.dataSdk.delete(ticket);
-    }
-
-    isLoading = false;
-    btn.style.opacity = '1';
-    btn.style.pointerEvents = 'auto';
-    showToast('✅ Boletos limpiados correctamente');
-  };
-
-  window.closeDraw = function() {
-    const o = document.getElementById('draw-overlay');
-    o.classList.add('hidden');
-    o.classList.remove('flex');
-  };
-
-  // Data SDK
-  const dataHandler = {
-    onDataChanged(data) {
-      allTickets = data;
-      
-      // Buscar configuración guardada del banco
-      const bankConfig = data.find(t => t.numero === -1 && t.nombre === 'CONFIGURACION_BANCO');
-      if (bankConfig) {
-        const savedAccount = bankConfig.telefono;
-        document.getElementById('bank-account-input').value = savedAccount;
-        updateCardDisplay();
-        blockBankAccountField(document.getElementById('bank-account-input'));
-        document.getElementById('card-holder').textContent = 'EDWIN EMMANUELLE SANCHEZ ENCISO';
-        document.getElementById('card-holder').style.color = '#fbbf24';
-        document.getElementById('card-holder').style.fontWeight = '800';
-      }
-      
-      // Filtrar solo boletos de participantes (número >= 1)
-      const actualTickets = data.filter(t => t.numero >= 1);
-      allTickets = actualTickets;
-      
-      // Actualizar cantidad de boletos disponibles
-      const usedCount = actualTickets.length;
-      const availableCount = 150 - usedCount;
-      document.getElementById('available-count').textContent = availableCount;
-      
-      renderGrid();
-    }
-  };
-
-  // Element SDK
-  async function initApp() {
-    const initResult = await window.dataSdk.init(dataHandler);
-    if (!initResult.isOk) { showToast('Error al cargar datos', 'error'); }
-
-    window.elementSdk.init({
-      defaultConfig,
-      onConfigChange: async (config) => {
-        const title = config.raffle_title || defaultConfig.raffle_title;
-        const subtitle = config.raffle_subtitle || defaultConfig.raffle_subtitle;
-        const bankAccount = String(config.bank_account || defaultConfig.bank_account);
-        const accountHolder = config.account_holder || defaultConfig.account_holder;
-        const paymentInfo = config.payment_info || defaultConfig.payment_info;
-        const font = config.font_family || defaultConfig.font_family;
-        const baseSize = config.font_size || defaultConfig.font_size;
-        const bg = config.background_color || defaultConfig.background_color;
-        const textCol = config.text_color || defaultConfig.text_color;
-
-        document.getElementById('main-title').textContent = title;
-        document.getElementById('main-subtitle').textContent = subtitle;
-        
-        // Format account number: extract only digits, limit to 16, add spaces every 4
-        const cleanDigits = bankAccount.replace(/\D/g, '');
-        const paddedDigits = cleanDigits.padEnd(16, '0').slice(0, 16);
-        const formatted = paddedDigits.match(/.{1,4}/g).join(' ');
-        document.getElementById('card-number').textContent = formatted;
-        document.getElementById('card-holder').textContent = accountHolder.toUpperCase();
-        
-        document.getElementById('main-title').style.fontFamily = `${font}, sans-serif`;
-        document.getElementById('main-subtitle').style.fontFamily = `${font}, sans-serif`;
-        document.getElementById('main-title').style.fontSize = `${baseSize * 2.5}px`;
-        document.getElementById('main-subtitle').style.fontSize = `${baseSize * 1.1}px`;
-        document.getElementById('main-subtitle').style.color = textCol;
-        document.getElementById('app').style.background = `linear-gradient(135deg, ${bg} 0%, ${bg}ee 50%, ${bg} 100%)`;
+    await fetch(API_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
       },
-      mapToCapabilities: (config) => ({
-        recolorables: [
-          { get: () => config.background_color || defaultConfig.background_color, set: (v) => { config.background_color = v; window.elementSdk.setConfig({ background_color: v }); } },
-          { get: () => config.surface_color || defaultConfig.surface_color, set: (v) => { config.surface_color = v; window.elementSdk.setConfig({ surface_color: v }); } },
-          { get: () => config.text_color || defaultConfig.text_color, set: (v) => { config.text_color = v; window.elementSdk.setConfig({ text_color: v }); } },
-          { get: () => config.accent_color || defaultConfig.accent_color, set: (v) => { config.accent_color = v; window.elementSdk.setConfig({ accent_color: v }); } },
-          { get: () => config.highlight_color || defaultConfig.highlight_color, set: (v) => { config.highlight_color = v; window.elementSdk.setConfig({ highlight_color: v }); } }
-        ],
-        borderables: [],
-        fontEditable: { get: () => config.font_family || defaultConfig.font_family, set: (v) => { config.font_family = v; window.elementSdk.setConfig({ font_family: v }); } },
-        fontSizeable: { get: () => config.font_size || defaultConfig.font_size, set: (v) => { config.font_size = v; window.elementSdk.setConfig({ font_size: v }); } }
-      }),
-      mapToEditPanelValues: (config) => new Map([
-        ['raffle_title', config.raffle_title || defaultConfig.raffle_title],
-        ['raffle_subtitle', config.raffle_subtitle || defaultConfig.raffle_subtitle],
-        ['admin_password', config.admin_password || defaultConfig.admin_password],
-        ['bank_account', config.bank_account || defaultConfig.bank_account],
-        ['account_holder', config.account_holder || defaultConfig.account_holder],
-        ['payment_info', config.payment_info || defaultConfig.payment_info]
-      ])
+      body: JSON.stringify({
+        data: [{
+          numero: seleccionado,
+          nombre: nombre,
+          telefono: telefono,
+          created_at: new Date().toISOString()
+        }]
+      })
     });
+
+    showToast(
+      `✅ Boleto #${String(seleccionado).padStart(3, "0")} registrado`
+    );
+
+    seleccionado = null;
+
+    document.getElementById("nombre").value = "";
+    document.getElementById("telefono").value = "";
+
+    await cargarBoletos();
+
+  } catch (err) {
+
+    console.error(err);
+
+    showToast("Error al registrar", "error");
+
+  } finally {
+
+    isLoading = false;
+
+    btn.style.opacity = "1";
+    btn.style.pointerEvents = "auto";
   }
+};
 
-  // Add admin button to header
-  window.addEventListener('load', () => {
-    // Botón para abrir/cerrar admin - inicialmente CERRADO
-    const adminBtn = document.createElement('button');
-    adminBtn.onclick = showAdminModal;
-    adminBtn.className = 'fixed top-4 left-4 p-2 rounded-lg text-xs font-600 transition-all z-40';
-    adminBtn.style.cssText = 'background:rgba(52,211,153,0.2); color:#34d399; border:1px solid rgba(52,211,153,0.3);';
-    adminBtn.innerHTML = '<i data-lucide="lock" style="width:16px;height:16px;"></i>';
-    adminBtn.title = 'Acceso admin';
-    adminBtn.id = 'admin-toggle-btn';
-    document.body.appendChild(adminBtn);
-    
-    updateCardDisplay();
-    renderGrid();
-    lucide.createIcons();
-    
-    // Force refresh to show page
-    setTimeout(() => {
-      document.getElementById('app').style.opacity = '1';
-      window.scrollTo(0, 0);
-    }, 100);
-  });
+// ==========================
+// INICIAR
+// ==========================
+window.addEventListener("load", async () => {
 
-cargarBoletos();
-  renderGrid();
   lucide.createIcons();
-  </script>
- <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'9f41718d413d9a51',t:'MTc3NzQ5ODYwMC4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
-</html>
+
+  await cargarBoletos();
+});
+</script>
