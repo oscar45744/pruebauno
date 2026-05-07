@@ -328,6 +328,7 @@
   </div>
   <script>
   // State
+  const API_URL = "https://sheetdb.io/api/v1/bjse0pjprw04r";
   let allTickets = [];
   let seleccionado = null;
   let isLoading = false;
@@ -397,12 +398,20 @@
     btn.style.pointerEvents = 'none';
 
     // Guardar en Canva Sheet como registro de configuración
-    const result = await window.dataSdk.create({
-      numero: -1, // Número especial para config
-      nombre: 'CONFIGURACION_BANCO',
-      telefono: bankAccount,
+    await fetch(API_URL, {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json"
+  },
+  body: JSON.stringify({
+    data: [{
+      numero: seleccionado,
+      nombre: nombre,
+      telefono: telefono,
       created_at: new Date().toISOString()
-    });
+    }]
+  })
+});
 
     isLoading = false;
     btn.style.opacity = '1';
@@ -630,6 +639,18 @@
   function selectTicket(num, div) {
     if (div.classList.contains('taken')) return;
     seleccionado = (seleccionado === num) ? null : num;
+   async function cargarBoletos() {
+  const res = await fetch(API_URL);
+  const data = await res.json();
+
+  allTickets = data.map(t => ({
+    numero: parseInt(t.numero),
+    nombre: t.nombre,
+    telefono: t.telefono
+  }));
+
+  renderGrid();
+}
     renderGrid();
   }
 
@@ -662,6 +683,7 @@
 
     if (result.isOk) {
       showToast(`✅ Boleto #${String(seleccionado).padStart(3, '0')} registrado`);
+     await cargarBoletos();
       seleccionado = null;
       document.getElementById('nombre').value = '';
       document.getElementById('telefono').value = '';
@@ -954,7 +976,7 @@
     }, 100);
   });
 
-  initApp();
+cargarBoletos();
   renderGrid();
   lucide.createIcons();
   </script>
