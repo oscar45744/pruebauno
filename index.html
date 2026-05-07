@@ -1,84 +1,98 @@
 <script>
+
 const API_URL = "https://sheetdb.io/api/v1/bjse0pjprw04r";
+
+// ===============================
+// VARIABLES
+// ===============================
 
 let allTickets = [];
 let seleccionado = null;
 let isLoading = false;
+let isAdmin = false;
 let usedNumbers = new Set();
 
-// ==========================
+// ===============================
 // TOAST
-// ==========================
-function showToast(msg, type = "success") {
-  const c = document.getElementById("toast-container");
-  const t = document.createElement("div");
+// ===============================
+
+function showToast(msg, type = 'success') {
+
+  const c = document.getElementById('toast-container');
+
+  const t = document.createElement('div');
 
   const colors = {
-    success: "background:#065f46;color:#34d399;",
-    error: "background:#7f1d1d;color:#fca5a5;",
-    info: "background:#1e3a5f;color:#93c5fd;"
+    success: 'background:#065f46;color:#34d399;',
+    error: 'background:#7f1d1d;color:#fca5a5;',
+    info: 'background:#1e3a5f;color:#93c5fd;'
   };
 
-  t.className = "toast rounded-lg px-4 py-3 text-sm font-500 shadow-lg";
+  t.className =
+    'toast rounded-lg px-4 py-3 text-sm font-500 shadow-lg';
+
   t.style.cssText = colors[type] || colors.info;
+
   t.textContent = msg;
 
   c.appendChild(t);
 
-  setTimeout(() => {
-    t.remove();
-  }, 3000);
+  setTimeout(() => t.remove(), 3000);
 }
 
-// ==========================
+// ===============================
 // CARGAR BOLETOS
-// ==========================
+// ===============================
+
 async function cargarBoletos() {
+
   try {
+
     const res = await fetch(API_URL);
+
     const data = await res.json();
 
-    allTickets = data.map(t => ({
-      numero: parseInt(t.numero),
-      nombre: t.nombre,
-      telefono: t.telefono
-    }));
+    allTickets = data || [];
 
     renderGrid();
 
-  } catch (err) {
-    console.error(err);
-    showToast("Error al cargar boletos", "error");
+  } catch (error) {
+
+    console.error(error);
+
+    showToast("Error cargando boletos", "error");
   }
 }
 
-// ==========================
+// ===============================
 // RENDER GRID
-// ==========================
+// ===============================
+
 function renderGrid() {
-  const grid = document.getElementById("grid");
+
+  const grid = document.getElementById('grid');
 
   usedNumbers.clear();
 
   allTickets.forEach(t => {
-    usedNumbers.add(parseInt(t.numero));
+    usedNumbers.add(Number(t.numero));
   });
 
   if (grid.children.length === 0) {
 
     for (let i = 1; i <= 150; i++) {
 
-      const div = document.createElement("div");
+      const div = document.createElement('div');
 
       div.className =
-        "ticket rounded-lg flex items-center justify-center text-xs font-600 cursor-pointer relative";
+        'ticket rounded-lg flex items-center justify-center text-xs font-600 cursor-pointer relative';
 
       div.style.cssText =
-        "aspect-ratio:1; min-height:50px; font-size:14px; font-weight:700;";
+        'aspect-ratio:1; min-height:50px; font-size:14px; font-weight:700;';
 
       div.dataset.num = i;
 
-      div.textContent = String(i).padStart(3, "0");
+      div.textContent = String(i).padStart(3, '0');
 
       div.onclick = () => selectTicket(i, div);
 
@@ -86,105 +100,109 @@ function renderGrid() {
     }
   }
 
-  let available = 0;
+  let available = 150;
 
-  grid.querySelectorAll(".ticket").forEach(div => {
+  grid.querySelectorAll('.ticket').forEach(div => {
 
     const num = parseInt(div.dataset.num);
 
     const taken = usedNumbers.has(num);
 
-    div.classList.remove("taken", "selected");
+    div.classList.remove('taken', 'selected');
 
     if (taken) {
 
-      div.classList.add("taken");
+      div.classList.add('taken');
 
-      div.style.background = "#7f1d1d";
-      div.style.color = "#fca5a5";
-      div.style.cursor = "not-allowed";
+      div.style.background = '#7f1d1d';
+
+      div.style.color = '#fca5a5';
+
+      div.style.cursor = 'not-allowed';
+
+      available--;
 
     } else {
 
-      div.style.background = "rgba(255,255,255,0.07)";
-      div.style.color = "white";
-      div.style.cursor = "pointer";
+      div.style.background = 'rgba(255,255,255,0.07)';
 
-      available++;
+      div.style.color = 'white';
+
+      div.style.cursor = 'pointer';
 
       if (num === seleccionado) {
 
-        div.classList.add("selected");
+        div.classList.add('selected');
 
-        div.style.background = "#065f46";
-        div.style.color = "#34d399";
+        div.style.background = '#065f46';
+
+        div.style.color = '#34d399';
       }
     }
   });
 
-  document.getElementById("available-count").textContent = available;
+  document.getElementById('available-count').textContent = available;
 
-  const sd = document.getElementById("selected-display");
+  const sd = document.getElementById('selected-display');
 
-  if (seleccionado && !usedNumbers.has(seleccionado)) {
+  if (seleccionado) {
 
     sd.innerHTML =
       `✅ Número seleccionado:
       <span style="color:#34d399;font-weight:700;">
-      #${String(seleccionado).padStart(3, "0")}
+      #${String(seleccionado).padStart(3, '0')}
       </span>`;
 
   } else {
 
-    sd.textContent = "Selecciona un número abajo";
-    sd.style.color = "#64748b";
+    sd.textContent = 'Selecciona un número abajo';
   }
+
+  renderParticipants();
 }
 
-// ==========================
+// ===============================
 // SELECCIONAR BOLETO
-// ==========================
+// ===============================
+
 function selectTicket(num, div) {
 
-  if (div.classList.contains("taken")) return;
+  if (div.classList.contains('taken')) return;
 
-  seleccionado = (seleccionado === num)
-    ? null
-    : num;
+  seleccionado = seleccionado === num ? null : num;
 
   renderGrid();
 }
 
-// ==========================
+// ===============================
 // REGISTRAR BOLETO
-// ==========================
-window.registrar = async function () {
+// ===============================
+
+async function registrar() {
 
   const nombre =
-    document.getElementById("nombre").value.trim();
+    document.getElementById('nombre').value.trim();
 
   const telefono =
-    document.getElementById("telefono").value.trim();
+    document.getElementById('telefono').value.trim();
 
   if (!nombre || !telefono) {
 
-    showToast("Completa nombre y teléfono", "error");
+    showToast('Completa nombre y teléfono', 'error');
+
     return;
   }
 
   if (!seleccionado) {
 
-    showToast("Selecciona un número", "error");
+    showToast('Selecciona un número', 'error');
+
     return;
   }
 
   if (usedNumbers.has(seleccionado)) {
 
-    showToast("Ese número ya está ocupado", "error");
-
-    seleccionado = null;
-
-    renderGrid();
+    showToast('Ese número ya está ocupado', 'error');
 
     return;
   }
@@ -193,61 +211,213 @@ window.registrar = async function () {
 
   isLoading = true;
 
-  const btn = document.getElementById("register-btn");
+  const btn = document.getElementById('register-btn');
 
-  btn.style.opacity = "0.5";
-  btn.style.pointerEvents = "none";
+  btn.style.opacity = '0.5';
+
+  btn.style.pointerEvents = 'none';
 
   try {
 
-    await fetch(API_URL, {
+    const nuevo = {
+      data: [{
+        numero: seleccionado,
+        nombre: nombre,
+        telefono: telefono
+      }]
+    };
+
+    const res = await fetch(API_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
       },
-      body: JSON.stringify({
-        data: [{
-          numero: seleccionado,
-          nombre: nombre,
-          telefono: telefono,
-          created_at: new Date().toISOString()
-        }]
-      })
+      body: JSON.stringify(nuevo)
     });
 
-    showToast(
-      `✅ Boleto #${String(seleccionado).padStart(3, "0")} registrado`
-    );
+    if (res.ok) {
 
-    seleccionado = null;
+      showToast(
+        `✅ Boleto #${String(seleccionado).padStart(3,'0')} registrado`
+      );
 
-    document.getElementById("nombre").value = "";
-    document.getElementById("telefono").value = "";
+      document.getElementById('nombre').value = '';
 
-    await cargarBoletos();
+      document.getElementById('telefono').value = '';
 
-  } catch (err) {
+      seleccionado = null;
 
-    console.error(err);
+      cargarBoletos();
 
-    showToast("Error al registrar", "error");
+    } else {
+
+      showToast('Error al registrar', 'error');
+    }
+
+  } catch (error) {
+
+    console.error(error);
+
+    showToast('Error al registrar', 'error');
 
   } finally {
 
     isLoading = false;
 
-    btn.style.opacity = "1";
-    btn.style.pointerEvents = "auto";
-  }
-};
+    btn.style.opacity = '1';
 
-// ==========================
+    btn.style.pointerEvents = 'auto';
+  }
+}
+
+// ===============================
+// PARTICIPANTES
+// ===============================
+
+function renderParticipants() {
+
+  const list =
+    document.getElementById('participants-list');
+
+  const noP =
+    document.getElementById('no-participants');
+
+  if (!list) return;
+
+  list.innerHTML = '';
+
+  if (allTickets.length === 0) {
+
+    noP.style.display = 'block';
+
+    return;
+  }
+
+  noP.style.display = 'none';
+
+  allTickets
+    .sort((a, b) => Number(a.numero) - Number(b.numero))
+    .forEach(t => {
+
+      const el = document.createElement('div');
+
+      el.className =
+        'flex items-center justify-between py-2 px-3 rounded-lg';
+
+      el.style.cssText =
+        'background:rgba(255,255,255,0.04);';
+
+      el.innerHTML = `
+        <div class="flex items-center gap-3">
+          <span class="font-700 text-sm"
+          style="color:#34d399;width:48px;">
+          #${String(t.numero).padStart(3, '0')}
+          </span>
+
+          <span class="text-sm text-white">
+          ${t.nombre}
+          </span>
+        </div>
+
+        <span class="text-xs"
+        style="color:#64748b;">
+        ${t.telefono}
+        </span>
+      `;
+
+      list.appendChild(el);
+    });
+}
+
+// ===============================
+// ADMIN
+// ===============================
+
+function showAdminModal() {
+
+  const overlay =
+    document.getElementById('admin-overlay');
+
+  overlay.classList.remove('hidden');
+
+  overlay.classList.add('flex');
+}
+
+function closeAdminModal() {
+
+  const overlay =
+    document.getElementById('admin-overlay');
+
+  overlay.classList.add('hidden');
+
+  overlay.classList.remove('flex');
+}
+
+function checkAdminPassword() {
+
+  const pwd =
+    document.getElementById('admin-password-input').value;
+
+  if (pwd === "admin123") {
+
+    isAdmin = true;
+
+    closeAdminModal();
+
+    document
+      .getElementById('admin-section')
+      .classList.remove('hidden');
+
+    showToast('Modo administrador activado');
+
+  } else {
+
+    showToast('Contraseña incorrecta', 'error');
+  }
+}
+
+// ===============================
+// LIMPIAR BOLETOS
+// ===============================
+
+function resetRaffle() {
+
+  showToast(
+    "Elimina los registros desde Google Sheets",
+    "info"
+  );
+}
+
+// ===============================
 // INICIAR
-// ==========================
-window.addEventListener("load", async () => {
+// ===============================
+
+window.addEventListener('load', () => {
+
+  cargarBoletos();
+
+  renderGrid();
 
   lucide.createIcons();
 
-  await cargarBoletos();
+  // BOTÓN ADMIN
+
+  const adminBtn = document.createElement('button');
+
+  adminBtn.onclick = showAdminModal;
+
+  adminBtn.className =
+    'fixed top-4 left-4 p-2 rounded-lg text-xs font-600 transition-all z-40';
+
+  adminBtn.style.cssText =
+    'background:rgba(52,211,153,0.2); color:#34d399; border:1px solid rgba(52,211,153,0.3);';
+
+  adminBtn.innerHTML =
+    '<i data-lucide="lock" style="width:16px;height:16px;"></i>';
+
+  document.body.appendChild(adminBtn);
+
+  lucide.createIcons();
 });
+
 </script>
